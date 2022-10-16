@@ -1,0 +1,288 @@
+---
+title: "RNAseq_pipeline_0622"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#if you are using a new Centos 7 server, which has no salmon and R packges installed yet.
+```{sh}
+
+#make sure you have installed curl before install bears
+yum install curl
+
+#install libxml2 before you install "XML"
+sudo yum makecache
+sudo yum -y install libxml2
+
+#install "bears" and solve other possible problems "one by one"!
+
+#install salmon
+wget https://github.com/COMBINE-lab/salmon/releases/download/v1.9.0/salmon-1.9.0_linux_x86_64.tar.gz ./
+
+```
+
+# Using R on MIDAS
+
+```{bash}
+# Enter one of the nodes with 16G memory
+qrsh -l h_vmem=16G
+
+# Load the modules
+module load R/x86_64/4.1.3
+module load gcc
+module load libpng
+module load salmon
+module load RSeQC
+```
+
+
+# Creating sample metadata
+
+```{r setup}
+if (!requireNamespace("remotes", quietly = TRUE)) {
+    install.packages("remotes")
+}
+remotes::install_github("almeidasilvaf/bears")
+remotes::install_github("lawremi/rtracklayer")
+library(bears)
+
+setwd("/ngsprojects/trscrpt_plat/results")
+```
+
+First, let's create a standard directory structure:
+
+```{r}
+ds <- create_dir_structure(rootdir = "/ngsprojects/trscrpt_plat/results")
+ds_pl <- create_dir_structure(rootdir = "/ngsprojects/trscrpt_plat/results/2_map2pl")
+```
+
+To get the directory structure in other R sessions, use the code below:
+
+```{r}
+ds <- list(fastqdir = "/ngsprojects/trscrpt_plat/results/01_FASTQ_files", 
+    fastqcdir = "/ngsprojects/trscrpt_plat/results/02_FastQC_dir", 
+    filtdir = "/ngsprojects/trscrpt_plat/results/03_filtered_FASTQ", 
+    mappingdir = "/ngsprojects/trscrpt_plat/results/04_read_mapping", 
+    salmonindex = "/ngsprojects/trscrpt_plat/results/05_quantification/salmon/idx", 
+    salmondir = "/ngsprojects/trscrpt_plat/results/05_quantification/salmon", 
+    kallistoindex = "/ngsprojects/trscrpt_plat/results/05_quantification/kallisto/idx", 
+    kallistodir = "/ngsprojects/trscrpt_plat/results/05_quantification/kallisto", 
+    fcountsdir = "/ngsprojects/trscrpt_plat/results/05_quantification/featureCounts", 
+    stringtiedir = "/ngsprojects/trscrpt_plat/results/05_quantification/stringtie")
+
+ds_pl <- list(fastqdir = "/ngsprojects/trscrpt_plat/results/2_map2pl/01_FASTQ_files", 
+    fastqcdir = "/ngsprojects/trscrpt_plat/results/2_map2pl/02_FastQC_dir", 
+    filtdir = "/ngsprojects/trscrpt_plat/results/2_map2pl/03_filtered_FASTQ", 
+    mappingdir = "/ngsprojects/trscrpt_plat/results/2_map2pl/04_read_mapping", 
+    salmonindex = "/ngsprojects/trscrpt_plat/results/2_map2pl/05_quantification/salmon/idx", 
+    salmondir = "/ngsprojects/trscrpt_plat/results/2_map2pl/05_quantification/salmon", 
+    kallistoindex = "/ngsprojects/trscrpt_plat/results/2_map2pl/05_quantification/kallisto/idx", 
+    kallistodir = "/ngsprojects/trscrpt_plat/results/2_map2pl/05_quantification/kallisto", 
+    fcountsdir = "/ngsprojects/trscrpt_plat/results/2_map2pl/05_quantification/featureCounts", 
+    stringtiedir = "/ngsprojects/trscrpt_plat/results/2_map2pl/05_quantification/stringtie")
+```
+
+All FASTQ files were moved to 03_filtered_FASTQ.
+Remember to rename the suffix of the fq.gz as ".fastq.gz"!!!
+
+```{r}
+# List all files for Ps
+ps_files <- list.files(path = ds$filtdir, pattern = "PS_*")
+pl_files <- list.files(path = ds$filtdir, pattern = "PL_*")
+#ps_sample_names <- unique(gsub("_[1|2]\\.clean.*", "", ps_files))
+ps_sample_names <- unique(gsub("_[1|2]\\.fastq.gz", "", ps_files))
+pl_sample_names <- unique(gsub("_[1|2]\\.fastq.*", "", pl_files))
+
+# Create a vector of tissue names
+tissues_ps <- gsub("_[0-9]$", "", ps_sample_names)
+tissues_pl <- gsub("_[0-9]$", "", pl_sample_names)
+
+tissues_ps <- gsub(".*_", "", tissues_ps)
+tissues_pl <- gsub(".*_", "", tissues_pl)
+  
+# Create metadata data frame
+ps_metadata <- data.frame(
+  BioSample = ps_sample_names,
+  Run = paste0("S", ps_sample_names),
+  Tissue = tissues_ps,
+  BioProject = "Ps_RNAseq",
+  Instrument = "Illumina Novaseq",
+  Layout = "PAIRED"
+)
+
+pl_metadata <- data.frame(
+  BioSample = pl_sample_names,
+  Run = pl_sample_names,
+  Tissue = tissues_pl,
+  BioProject = "Pl_RNAseq",
+  Instrument = "Illumina Novaseq",
+  Layout = "PAIRED"
+)
+```
+
+# Transcript abundance quantification
+
+##genome index
+First of all, we will need to create a reference transcriptome from
+the genome sequence. This will be a FASTA file with the sequences
+of all annotated transcripts in the reference genome.
+
+```{r}
+# Loading the required packages
+library(Biostrings)
+library(GenomicFeatures)
+library(GenomicRanges)
+library(BSgenome)
+
+# Reading the genome
+genome_path <- "/ngsprojects/trscrpt_plat/results/data/Pstr.fa"
+genome_pl_path <- "/ngsprojects/trscrpt_plat/results/data/Plon.fa"
+
+genome <- readDNAStringSet(genome_path)
+genome_pl <- readDNAStringSet(genome_pl_path)
+
+# Reading the annotation
+gff_path <- "/ngsprojects/trscrpt_plat/results/data/Pstr.gff3"
+gff_pl_path <- "/ngsprojects/trscrpt_plat/results/data/Plon.gff3"
+
+annotation <- rtracklayer::import(gff_path)
+annotation_pl <- rtracklayer::import(gff_pl_path)
+
+# Getting transcript ranges
+transcript_ranges <- annotation[annotation$type %in% c("mRNA", "exon")]
+transcript_ranges$ID <- gsub("\\.exon.*", "", transcript_ranges$ID)
+transcripts <- split(transcript_ranges, transcript_ranges$ID)
+
+transcript_ranges_pl <- annotation[annotation_pl$type %in% c("mRNA", "exon")]
+transcript_ranges_pl$ID <- gsub("\\.exon.*", "", transcript_ranges_pl$ID)
+transcripts_pl <- split(transcript_ranges_pl, transcript_ranges_pl$ID)
+# Get sequences of each transcript
+
+tx_seqs <- GenomicFeatures::extractTranscriptSeqs(x = genome, transcripts = transcripts)
+tx_seqs_pl <- GenomicFeatures::extractTranscriptSeqs(x = genome_pl, transcripts = transcripts_pl)
+
+# Export as a FASTA file
+writeXStringSet(
+  tx_seqs,
+  filepath = "/ngsprojects/trscrpt_plat/results/data/Pstr_transcripts.fasta.gz",
+  compress = TRUE
+)
+
+writeXStringSet(
+  tx_seqs_pl,
+  filepath = "/ngsprojects/trscrpt_plat/results/data/Plon_transcripts.fasta.gz",
+  compress = TRUE
+)
+```
+
+Now that we have our transcriptome, we can index it with the function
+`salmon_index`.
+
+```{r}
+# Path to the transcriptome file
+transcriptome_path <- "/ngsprojects/trscrpt_plat/results/data/Pstr_transcripts.fasta.gz"
+transcriptome_path_pl <- "/ngsprojects/trscrpt_plat/results/data/Plon_transcripts.fasta.gz"
+
+# Index the genome
+idx_salmon <- salmon_index(
+  salmonindex = ds$salmonindex,
+  transcriptome_path = transcriptome_path
+)
+
+idx_pl_salmon <- salmon_index(
+  salmonindex = ds_pl$salmonindex,
+  transcriptome_path = transcriptome_path_pl
+)
+```
+
+##quantification
+Now, let's quantify the transcript abundances with the 
+function `salmon_quantify`.
+
+```{r}
+#ds$filtdir <- "/ngsprojects/trscrpt_plat/data_archive"
+#ps_metadata$Run <- ps_metadata$BioSample
+
+quant_salmon <- salmon_quantify(
+  ps_metadata,
+  filtdir = ds$filtdir,
+  salmonindex = ds$salmonindex,
+  salmondir = ds$salmondir
+)
+
+quant_salmon_pl_map2ps <- salmon_quantify(
+  pl_metadata,
+  filtdir = ds$filtdir,
+  salmonindex = ds$salmonindex,
+  salmondir = ds$salmondir
+)
+
+quant_salmon_pl_map2pl <- salmon_quantify(
+  pl_metadata,
+  filtdir = ds$filtdir,
+  salmonindex = ds_pl$salmonindex,
+  salmondir = ds_pl$salmondir
+)
+
+```
+
+#summarize the output of salmon to gene expression matrix
+Finally, we can read the salmon output (.sf files) as SummarizedExperiment
+objects.
+
+For that, we will need to create a 2-column data frame with
+transcript-to-gene ID correspondences.
+
+```{r}
+# Create a data frame of transcript to gene correspondence
+ps_granges <- rtracklayer::import(gff_path)
+ps_granges <- ps_granges[ps_granges$type %in% c("mRNA", "exon")]
+transcript_IDs <- unique(ps_granges$Name)
+transcript_IDs <- transcript_IDs[!is.na(transcript_IDs)]
+
+tx2gene <- data.frame(
+  TXNAME = transcript_IDs,
+  GENEID = transcript_IDs
+)
+
+# Combine Pl and Ps sample metadata
+new_metadata <- rbind(ps_metadata, pl_metadata)
+
+# Read salmon output as a SummarizedExperiment object
+se <- salmon2se(
+    new_metadata, 
+    level = "gene", 
+    salmondir = ds$salmondir,
+    tx2gene
+)
+
+library(SummarizedExperiment)
+# Looking at sample metadata
+colData(se)
+
+# Obtaining gene expression matrix in raw counts and TPM
+exp_counts <- round(assay(se, "gene_counts"))
+exp_TPM <- assay(se, "gene_TPM")
+
+save(
+  se,
+  file = "/ngsprojects/trscrpt_plat/results/05_quantification/se.rda",
+  compress = "xz"
+)
+```
+
+In the future, if I want to see the `se` object again, run:
+
+```{r}
+load("/ngsprojects/trscrpt_plat/results/05_quantification/se.rda")
+
+# to get the raw counts matrix again
+exp_counts <- round(assay(se, "gene_counts"))
+
+```
+
