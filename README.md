@@ -1,7 +1,9 @@
 # Caoyu819-protocols-for-karst-adaptation-of-Platycarya
 
 Author: Yu Cao
+
 Email: caoyuchn@gmail.com
+
 If you have any questions about this pipeline or scripts, please feel free to contact me (Yu Cao), either through issues column of github or email.
 
 This repository include the main scripts used in the paper: Chromosome-level genome assemblies and population-genomic analyses shed light on adaptation to karst and incipient speciation of the genus Platycarya (Juglandaceae)
