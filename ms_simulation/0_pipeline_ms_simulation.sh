@@ -19,7 +19,7 @@ for i in `ls $outdir/*.vcf|sed "s/$outdir\///g"`
 do
         awk '{if ($4=="." && $5==".") {$2=$2*25000;$4="A";$5="T"}{print $0}}' $outdir/$i|sed '6,$s/ /\t/g' >$outdir/$i".2"
         mv $outdir/$i".2" $outdir/$i
-        #step3. calculate Fst
+        #calculate Fst
         vcftools --vcf $outdir/$i --weir-fst-pop list_PL --weir-fst-pop list_PS --fst-window-size 25001 --out $outdir/$i 2>log/log_fst_$i
         vcftools --vcf $outdir/$i --keep list_PL --TajimaD 25000 --out $outdir/PL_$i 2>log/log_tajimaD_PL_$i
         vcftools --vcf $outdir/$i --keep list_PS --TajimaD 25000 --out $outdir/PS_$i 2>log/log_tajimaD_PS_$i
