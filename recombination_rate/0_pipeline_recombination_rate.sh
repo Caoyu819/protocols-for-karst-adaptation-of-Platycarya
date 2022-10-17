@@ -66,11 +66,5 @@ sh get_winRes.sh 500000 blocklist_500k out_res_500k 2_PS_block_500k_res.txt >2_P
 
 :<<!
 #3.res2Map
-nohup perl getMap_from_LDhatRes.pl blocklist_500k_PL_remain1349.sort out_res_500k 5910 1_PL.smcpp.map 1_PL.smcpp.res &
-nohup perl getMap_from_LDhatRes.pl blocklist_500k_PS_remain1349.sort out_res_500k 3450 2_PS.smcpp.map 2_PS.smcpp.res &
-
-nohup perl getMap_from_LDhatRes.pl blocklist_500k_PL_remain1349.sort out_res_500k 20000 1_PL.psmc.map 1_PL.psmc.res &
-nohup perl getMap_from_LDhatRes.pl blocklist_500k_PS_remain1349.sort out_res_500k 10000 2_PS.psmc.map 2_PS.psmc.res &
-
 nohup perl getMap_from_LDhatRes.pl blocklist_500k_PL_remain1349.sort out_res_500k 40000 1_PL.ima3.map 1_PL.ima3.res &
 nohup perl getMap_from_LDhatRes.pl blocklist_500k_PS_remain1349.sort out_res_500k 20000 2_PS.ima3.map 2_PS.ima3.res &
