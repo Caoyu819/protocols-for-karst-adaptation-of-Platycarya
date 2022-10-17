@@ -18,7 +18,7 @@ pheatmap(wm.ps.cor, cellheight = 20, cellwidth = 20, display_numbers = T)
 
 #==============deg.analysis==================================##
 condition <- factor(c(rep("pl",3), rep("ps",3)))
-tl.leaf <- subset(tl, select = c(PL_TL_L5,PL_TL_L11,PL_TL_L13,PS_TL_L1,PS_TL_L2,PS_TL_L7))  ##这里id名我就是手动替换的
+tl.leaf <- subset(tl, select = c(PL_TL_L5,PL_TL_L11,PL_TL_L13,PS_TL_L1,PS_TL_L2,PS_TL_L7))  ##substitute the id name here manually
 tl.leaf <- round(tl.leaf)
 colData.tl.leaf <- data.frame(row.names=colnames(tl.leaf), condition)
 library(DESeq2)
