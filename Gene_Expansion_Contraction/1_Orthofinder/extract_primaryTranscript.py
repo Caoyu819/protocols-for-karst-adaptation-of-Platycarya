@@ -10,8 +10,7 @@ import sys,os
 
 #######################
 
-#从cds获得每条转录本的长度，从gff获得每个基因包含哪些转录本
-
+#Retrieve the length of each transcript and obtain the information for the transcripts of each gene from the GFF file.
 cds = sys.argv[1]
 gff = sys.argv[2]
 fout = sys.argv[3]
@@ -21,23 +20,28 @@ fout = sys.argv[3]
 
 seq_index = SeqIO.index(cds ,'fasta')
 gffdb = gffutils.create_db(gff,dbfn='gff.db',force=True,merge_strategy='replace')
-#以基因为key，转录本为value的字典
+#Creat the dictionary: key='gene', value='transcript'
 gene2longestcds = {}
 
-#对基因进行迭代
+#Iterate over each gene.
 for g in gffdb.all_features(featuretype='gene'):
     g_id= g.id
     for m in gffdb.children(g, featuretype='mRNA'):##只关注mRNA信息
-        #m_id = m.id.replace('rna-' , '')
         m_id = m.id
-        m_len = len(seq_index[m_id].seq)
-        #一个基因中最长转录本的名字
-        if g_id not in gene2longestcds:
-            gene2longestcds[g_id] = m_id
-        elif m_len >len(seq_index[gene2longestcds[g_id]].seq):
-            gene2longestcds[g_id] = m_id
-
+        #Check if the gene/mRNA name in the GFF file also appears in the input CDS/PEP FASTA file.
+        if m_id not in seq_id:
+            #print (f"{m_id} is not in fasta file")
+            continue
+        else:
+        #m_id = m.id.replace('rna-' , '')
+            m_len = len(seq_index[m_id].seq)
+        #the name of longest transcript
+            if g_id not in gene2longestcds:
+                gene2longestcds[g_id] = m_id
+            elif m_len >len(seq_index[gene2longestcds[g_id]].seq):
+                gene2longestcds[g_id] = m_id
+                
 sr_list = [v for k,v in seq_index.items() if k in gene2longestcds.values()]
 
-##输出
+#Output the longest transcript to file
 SeqIO.write(sr_list, fout, 'fasta')
