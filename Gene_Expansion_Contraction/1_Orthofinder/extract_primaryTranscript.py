@@ -26,7 +26,8 @@ gene2longestcds = {}
 #Iterate over each gene.
 for g in gffdb.all_features(featuretype='gene'):
     g_id= g.id
-    for m in gffdb.children(g, featuretype='mRNA'):##只关注mRNA信息
+    #Only extract the information of mRNA
+    for m in gffdb.children(g, featuretype='mRNA'):
         m_id = m.id
         #Check if the gene/mRNA name in the GFF file also appears in the input CDS/PEP FASTA file.
         if m_id not in seq_id:
