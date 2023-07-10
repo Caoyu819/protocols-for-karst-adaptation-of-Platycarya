@@ -18,6 +18,10 @@ fout = sys.argv[3]
 #seq_index_ps = SeqIO.index(cds ,'fasta')
 #gffdb_ps = gffutils.create_db(gff,dbfn='gff.db',force=True,merge_strategy='creat_unique')
 
+seq_id=[]
+for seq_record in SeqIO.parse(cds,"fasta"):
+    seq_id.append(seq_record.id)
+    
 seq_index = SeqIO.index(cds ,'fasta')
 gffdb = gffutils.create_db(gff,dbfn='gff.db',force=True,merge_strategy='replace')
 #Creat the dictionary: key='gene', value='transcript'
